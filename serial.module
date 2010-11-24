@@ -1,0 +1,295 @@
+<?php
+// $Id: serial.module,v 1.0 2010/11/23 07:00:00 solotandem Exp $
+
+/**
+ * @file
+ * Defines serial field type.
+ *
+ * @author Jim Berry ("boombatower", http://drupal.org/user/240748)
+ */
+
+/**
+ * Implements hook_help().
+ */
+function serial_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#serial':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('The Serial module defines a serial field type for the Field module. Values are stored as serialized strings. See the <a href="@field-help">Field module help page</a> for more information about fields.', array('@field-help' => url('admin/help/field'))) . '</p>';
+      return $output;
+  }
+}
+
+/**
+ * Implements hook_field_info().
+ */
+function serial_field_info() {
+  return array(
+    'serial' => array(
+      'label' => t('Serial'),
+      'description' => t('This field stores varchar text in the database.'),
+      'settings' => array('max_length' => 255),
+      'default_widget' => 'serial_textfield',
+      'default_formatter' => 'serial_default',
+    ),
+    'serial_long' => array(
+      'label' => t('Long serial'),
+      'description' => t('This field stores long serial in the database.'),
+      'default_widget' => 'serial_textarea',
+      'default_formatter' => 'serial_default',
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_settings_form().
+ */
+function serial_field_settings_form($field, $instance, $has_data) {
+  $settings = $field['settings'];
+
+  $form = array();
+
+  if ($field['type'] == 'serial') {
+    $form['max_length'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Maximum length'),
+      '#default_value' => $settings['max_length'],
+      '#required' => TRUE,
+      '#description' => t('The maximum length of the field in characters.'),
+      '#element_validate' => array('_element_validate_integer_positive'),
+      // @todo: If $has_data, add a validate handler that only allows
+      // max_length to increase.
+      '#disabled' => $has_data,
+    );
+  }
+
+  return $form;
+}
+
+/**
+ * Implements hook_field_validate().
+ *
+ * Possible error codes:
+ * - 'serial_value_max_length': The value exceeds the maximum length.
+ */
+function serial_field_validate($entity_type, $entity, $field, $instance, $langcode, $items, &$errors) {
+  foreach ($items as $delta => $item) {
+    $column = 'value';
+    if (!empty($item[$column])) {
+      if (!empty($field['settings']['max_length']) && drupal_strlen($item[$column]) > $field['settings']['max_length']) {
+        switch ($column) {
+          case 'value':
+            $message = t('%name: the text may not be longer than %max characters.', array('%name' => $instance['label'], '%max' => $field['settings']['max_length']));
+            break;
+        }
+        $errors[$field['field_name']][$langcode][$delta][] = array(
+          'error' => "serial_{$column}_length",
+          'message' => $message,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_field_load().
+ */
+function serial_field_load($entity_type, $entities, $field, $instances, $langcode, &$items, $age) {
+  foreach ($entities as $id => $entity) {
+    foreach ($items[$id] as $delta => $item) {
+      // Assume the field was saved after passing through hook_field_validate()
+      // so we do not need to check text length on 'serial' fields.
+      $items[$id][$delta]['value'] = unserialize($item['value']);
+    }
+  }
+}
+
+/**
+ * Implements hook_field_update().
+ */
+function serial_field_update($entity_type, $entity, $field, $instance, $langcode, &$items) {
+  foreach ($items as $delta => $item) {
+    if (isset($item['value'])) {
+      $items[$delta]['value'] = serialize(serial_eval($item['value']));
+    }
+  }
+}
+
+/**
+ * Implements hook_field_is_empty().
+ */
+function serial_field_is_empty($item, $field) {
+  if (empty($item['value']) && (string) $item['value'] !== '0') {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function serial_field_formatter_info() {
+  return array(
+    'serial_default' => array(
+      'label' => t('Default'),
+      'description' => t('Represent serialized values in an easy to read manner.'),
+      'field types' => array('serial', 'serial_long'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function serial_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array();
+
+  switch ($display['type']) {
+    case 'serial_default':
+      foreach ($items as $delta => $item) {
+        // Build form element.
+        $element[$delta]['#type'] = 'markup';
+        $element[$delta]['#markup'] = serial_display($item['value'], 'view', $instance['widget']['type']);
+      }
+      break;
+  }
+
+  return $element;
+}
+
+/**
+ * Returns PHP-evaluated string.
+ *
+ * @return
+ *   Evaluated value.
+ */
+function serial_eval($string) {
+  return @eval('return array(' . $string . ');');
+}
+
+/**
+ * Returns array converted to string.
+ *
+ * @param string $display_type
+ *   Display type of 'view' or 'edit'.
+ *
+ * @return
+ *   Display string.
+ */
+function serial_display($value, $display_type = 'view', $widget_type = 'serial_textarea') {
+  $string = var_export($value, TRUE);
+
+  if ($widget_type == 'serial_textfield') {
+    // Display as inline array.
+    $string = preg_replace('/\n\s*/', ' ', $string);
+  }
+  if ($display_type == 'edit') {
+    // Remove the outermost 'array()' string.
+    $string = substr($string, 7, -1);
+  }
+  else {
+    $string = highlight_string('<?php ' . $string, TRUE);
+  }
+
+  return $string;
+}
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function serial_field_widget_info() {
+  return array(
+    'serial_textfield' => array(
+      'label' => t('Serial field'),
+      'field types' => array('serial'),
+      'settings' => array('size' => -1), // array('size' => 60),
+    ),
+    'serial_textarea' => array(
+      'label' => t('Serial long (multiple rows)'),
+      'field types' => array('serial_long'),
+      'settings' => array('rows' => 5),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_settings_form().
+ */
+function serial_field_widget_settings_form($field, $instance) {
+  $widget = $instance['widget'];
+  $settings = $widget['settings'];
+
+  if ($widget['type'] == 'serial_textfield') {
+    $form['size'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Size of textfield'),
+      '#default_value' => $settings['size'],
+      '#required' => TRUE,
+      '#description' => t('The size attribute of the text field. A value of -1 will set a width style of 100%.'),
+      '#element_validate' => array('_element_validate_integer'), // @todo -1 or positive
+    );
+  }
+  else {
+    $form['rows'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Rows'),
+      '#default_value' => $settings['rows'],
+      '#required' => TRUE,
+      '#element_validate' => array('_element_validate_integer_positive'),
+    );
+  }
+
+  return $form;
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function serial_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  $summary_widget = array();
+  $main_widget = array();
+
+  if (isset($items[$delta]['value'])) {
+    $items[$delta]['value'] = serial_display($items[$delta]['value'], 'edit',$instance['widget']['type']);
+  }
+
+  switch ($instance['widget']['type']) {
+    case 'serial_textfield':
+      $main_widget = $element + array(
+        '#type' => 'textfield',
+        '#default_value' => isset($items[$delta]['value']) ? $items[$delta]['value'] : NULL,
+        '#size' => $instance['widget']['settings']['size'],
+        '#maxlength' => $field['settings']['max_length'],
+        '#attributes' => array('class' => array('text-full')),
+      );
+      if ($instance['widget']['settings']['size'] == -1) {
+        unset($main_widget['#size']);
+        $main_widget['#attributes']['style'] = array('width: 100%');
+      }
+      break;
+
+    case 'serial_textarea':
+      $main_widget = $element + array(
+        '#type' => 'textarea',
+        '#default_value' => isset($items[$delta]['value']) ? $items[$delta]['value'] : NULL,
+        '#rows' => $instance['widget']['settings']['rows'],
+        '#attributes' => array('class' => array('text-full')),
+      );
+      break;
+  }
+
+  if ($main_widget) {
+    $element['value'] = $main_widget;
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_widget_error().
+ */
+function serial_field_widget_error($element, $error, $form, &$form_state) {
+  $error_element = $element[$element['#columns'][0]];
+  form_error($error_element, $error['message']);
+}

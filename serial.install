@@ -1,0 +1,37 @@
+<?php
+// $Id: serial.install,v 1.0 2010/11/23 07:00:00 solotandem Exp $
+
+/**
+ * @file
+ * Install, update and uninstall functions for the serial module.
+ */
+
+/**
+ * Implements hook_field_schema().
+ */
+function serial_field_schema($field) {
+  switch ($field['type']) {
+    case 'serial':
+      $columns = array(
+        'value' => array(
+          'type' => 'varchar',
+          'length' => $field['settings']['max_length'],
+          'not null' => FALSE,
+        ),
+      );
+      break;
+
+    case 'serial_long':
+      $columns = array(
+        'value' => array(
+          'type' => 'text',
+          'size' => 'big',
+          'not null' => FALSE,
+        ),
+      );
+      break;
+  }
+  return array(
+    'columns' => $columns,
+  );
+}

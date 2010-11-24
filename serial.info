@@ -1,0 +1,9 @@
+; $Id: serial.info,v 1.0 2010/11/23 07:00:00 solotandem Exp $
+name = Serial
+description = Defines serial field type.
+package = Conduit
+version = VERSION
+core = 7.x
+dependencies[] = field
+files[] = serial.module
+;files[] = serial.test
