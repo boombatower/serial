@@ -214,12 +214,25 @@ function serial_field_load($entity_type, $entities, $field, $instances, $langcod
 }
 
 /**
+ * Implements hook_field_presave().
+ */
+function serial_field_presave($entity_type, &$entity, $field, $instance, $langcode, &$items) {
+  foreach ($items as $delta => $item) {
+    if (isset($item['value']) && !is_array($item['value'])) {
+      // If the field has been displayed, then the value is a string. Change value
+      // to array as expected by node hooks (e.g. hook_node_update()).
+      $items[$delta]['value'] = serial_eval($item['value']);
+    }
+  }
+}
+
+/**
  * Implements hook_field_update().
  */
 function serial_field_update($entity_type, $entity, $field, $instance, $langcode, &$items) {
   foreach ($items as $delta => $item) {
     if (isset($item['value'])) {
-      $items[$delta]['value'] = serialize(serial_eval($item['value']));
+      $items[$delta]['value'] = serialize($item['value']);
     }
   }
 }
