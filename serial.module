@@ -227,6 +227,17 @@ function serial_field_presave($entity_type, &$entity, $field, $instance, $langco
 }
 
 /**
+ * Implements hook_field_insert().
+ */
+function serial_field_insert($entity_type, $entity, $field, $instance, $langcode, &$items) {
+  foreach ($items as $delta => $item) {
+    if (isset($item['value'])) {
+      $items[$delta]['value'] = serialize($item['value']);
+    }
+  }
+}
+
+/**
  * Implements hook_field_update().
  */
 function serial_field_update($entity_type, $entity, $field, $instance, $langcode, &$items) {
@@ -241,7 +252,7 @@ function serial_field_update($entity_type, $entity, $field, $instance, $langcode
  * Implements hook_field_is_empty().
  */
 function serial_field_is_empty($item, $field) {
-  if (empty($item['value']) && (string) $item['value'] !== '0') {
+  if (!isset($item['value']) || $item['value'] === '') {
     return TRUE;
   }
   return FALSE;
