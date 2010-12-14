@@ -99,7 +99,6 @@ function serial_element_validate_php_tokens($element, &$form_state) {
   if (empty($element['#value'])) {
     return;
   }
-  sdp($element, '$element');
   $message = t('%field: this field must contain a comma-separated list of valid PHP tokens.', array('%field' => $element['#title']));
   $tokens = serial_eval($element['#value']);
   if (!is_array($tokens)) {
