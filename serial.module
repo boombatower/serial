@@ -128,78 +128,6 @@ function serial_field_instance_settings_validate($element, &$form_state) {
 }
 
 /**
- * Implements hook_field_validate().
- *
- * Possible error codes:
- * - 'serial_value_max_length': The value exceeds the maximum length.
- * - 'serial_value_tokens': The value contains non-allowed tokens.
- * - 'serial_value_syntax': The value is not valid php syntax.
- * - 'serial_value_items': The value contains invalid items.
- */
-function serial_field_validate($entity_type, $entity, $field, $instance, $langcode, $items, &$errors) {
-  foreach ($items as $delta => $item) {
-    $column = 'value';
-    if (empty($item[$column])) {
-      continue;
-    }
-
-    // Check the field length.
-    if (!empty($field['settings']['max_length']) && drupal_strlen($item[$column]) > $field['settings']['max_length']) {
-      switch ($column) {
-        case 'value':
-          $message = t('%name: this field may not be longer than %max characters.', array('%name' => $instance['label'], '%max' => $field['settings']['max_length']));
-          break;
-      }
-      $errors[$field['field_name']][$langcode][$delta][] = array(
-        'error' => "serial_{$column}_max_length",
-        'message' => $message,
-      );
-    }
-
-    // Check the field contents.
-
-    // Make an array of allowed tokens.
-    $strings = explode(', ', $instance['settings']['allowed_tokens']); // $allowed = array(T_ARRAY, T_CONSTANT_ENCAPSED_STRING, T_DNUMBER, T_DOUBLE_ARROW, T_LNUMBER, T_STRING, T_WHITESPACE);
-    $allowed = array_map('constant', $strings);
-    // Confirm the value contains only allowed tokens.
-    $tokens = token_get_all('<?php ' . $item[$column]);
-    // Ignore the T_OPEN_TAG token.
-    array_shift($tokens);
-    $valid = TRUE;
-    foreach ($tokens as $token) {
-      if (is_array($token) && !in_array($token[0], $allowed)) {
-        $message = t('%name: this field may only contain numbers, strings, commas, or whitespace; or arrays constructed from the same elements.', array('%name' => $instance['label']));
-        $errors[$field['field_name']][$langcode][$delta][] = array(
-          'error' => "serial_{$column}_tokens",
-          'message' => $message,
-        );
-        // Skip to next field.
-        continue 2;
-      }
-    }
-    // Confirm the value is valid php syntax.
-    $value = serial_eval($item[$column]);
-    if (!is_array($value)) {
-      $message = t('%name: this field must contain valid PHP syntax.', array('%name' => $instance['label']));
-      $errors[$field['field_name']][$langcode][$delta][] = array(
-        'error' => "serial_{$column}_syntax",
-        'message' => $message,
-      );
-    }
-    else {
-      // Allow interested parties to validate the array.
-      if ($errors = module_invoke_all('serial_validate', $value)) {
-        $message = t('%name: this field contains these invalid items.', array('%name' => $instance['label'])) . theme('item_list', array('items' => $errors));
-        $errors[$field['field_name']][$langcode][$delta][] = array(
-          'error' => "serial_{$column}_items",
-          'message' => $message,
-        );
-      }
-    }
-  }
-}
-
-/**
  * Implements hook_field_load().
  */
 function serial_field_load($entity_type, $entities, $field, $instances, $langcode, &$items, $age) {
@@ -407,7 +335,75 @@ function serial_field_widget_form(&$form, &$form_state, $field, $instance, $lang
       break;
   }
 
+  $element['#element_validate'][] = 'serial_field_widget_validate';
+
   return array('value' => $element);
+}
+
+/**
+ * Form element validation handler for serial field element.
+ *
+ * Error checks:
+ * - The value exceeds the maximum length.
+ * - The value contains non-allowed tokens.
+ * - The value is not valid php syntax.
+ * - The value contains invalid items.
+ */
+function serial_field_widget_validate($element, &$form_state, $form) {
+  $field = $form_state['field'][$element['#field_name']][$element['#language']]['field'];
+  $instance = $form_state['field'][$element['#field_name']][$element['#language']]['instance'];
+
+  $value = $element['#value'];
+
+  if (!trim($value)) {
+    form_set_value($element, array(), $form_state);
+    return;
+  }
+
+  // Check the field length.
+  if (!empty($field['settings']['max_length']) && drupal_strlen($value) > $field['settings']['max_length']) {
+    switch ($column) {
+      case 'value':
+        $message = t('%name: this field may not be longer than %max characters.', array('%name' => $instance['label'], '%max' => $field['settings']['max_length']));
+        break;
+    }
+    form_error($element, $message);
+  }
+
+  // Check the field contents.
+
+  // Make an array of allowed tokens.
+  $strings = explode(', ', $instance['settings']['allowed_tokens']);
+  $allowed = array_map('constant', $strings);
+  // Confirm the value contains only allowed tokens.
+  $tokens = token_get_all('<?php ' . $value);
+  // Ignore the T_OPEN_TAG token.
+  array_shift($tokens);
+  $valid = TRUE;
+  foreach ($tokens as $token) {
+    if (is_array($token) && !in_array($token[0], $allowed)) {
+      $message = t('%name: this field may only contain numbers, strings, commas, or whitespace; or arrays constructed from the same elements.', array('%name' => $instance['label']));
+      form_error($element, $message);
+      return;
+    }
+  }
+  // Confirm the value is valid php syntax.
+  $value = serial_eval($value);
+  if (!is_array($value)) {
+    $message = t('%name: this field must contain valid PHP syntax.', array('%name' => $instance['label']));
+    form_error($element, $message);
+    return;
+  }
+  else {
+    // Allow interested parties to validate the array.
+    if ($errors = module_invoke_all('serial_validate', $value)) {
+      $message = t('%name: this field contains these invalid items.', array('%name' => $instance['label'])) . theme('item_list', array('items' => $errors));
+      form_error($element, $message);
+      return;
+    }
+  }
+
+  form_set_value($element, $value, $form_state);
 }
 
 /**
