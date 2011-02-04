@@ -238,6 +238,9 @@ function serial_eval($string) {
  */
 function serial_display($value, $display_type = 'view', $widget_type = 'serial_textarea') {
   $string = var_export($value, TRUE);
+  // Tidy the appearance to match print_r() format.
+  $string = preg_replace('/=>\s+array/m', '=> array', $string);
+  $string = str_replace('array (', 'array(', $string);
 
   if ($widget_type == 'serial_textfield') {
     // Display as inline array.
