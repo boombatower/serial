@@ -1,6 +1,4 @@
 <?php
-// $Id: serial.install,v 1.0 2010/11/23 07:00:00 solotandem Exp $
-
 /**
  * @file
  * Install, update and uninstall functions for the serial module.
